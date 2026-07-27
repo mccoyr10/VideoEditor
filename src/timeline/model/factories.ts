@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import type { Clip, Project, SourceId, Track, TrackKind } from "./types";
+import type { Clip, MediaKind, Project, SourceId, Track, TrackKind } from "./types";
 
 export function createTrack(kind: TrackKind, index: number): Track {
   return { id: nanoid(), kind, index, clips: [] };
@@ -7,6 +7,7 @@ export function createTrack(kind: TrackKind, index: number): Track {
 
 export function createClip(params: {
   sourceId: SourceId;
+  sourceKind: MediaKind;
   trackId: string;
   startSec: number;
   inPointSec: number;
@@ -15,6 +16,7 @@ export function createClip(params: {
   return {
     id: nanoid(),
     sourceId: params.sourceId,
+    sourceKind: params.sourceKind,
     trackId: params.trackId,
     startSec: params.startSec,
     inPointSec: params.inPointSec,

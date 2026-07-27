@@ -6,6 +6,7 @@ import { clipDurationSec } from "../model/types";
 function baseClip() {
   return createClip({
     sourceId: "src-1",
+    sourceKind: "video",
     trackId: "track-1",
     startSec: 10,
     inPointSec: 2,

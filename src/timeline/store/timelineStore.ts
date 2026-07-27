@@ -1,11 +1,13 @@
 import { create } from "zustand";
-import { createProject } from "../model/factories";
-import { clipEndSec, type Project } from "../model/types";
+import { createProject, createTrack } from "../model/factories";
+import { clipEndSec, type Project, type TrackKind } from "../model/types";
+import { canAddSourceKindToTrack } from "../model/trackCompatibility";
 import { trimClip } from "../ops/trim";
 import { insertClip } from "../ops/insert";
 import { splitClip } from "../ops/split";
 import { deleteClip as deleteClipOp } from "../ops/remove";
-import { moveClipWithinTrack } from "../ops/reorder";
+import { moveClipWithinTrack, moveClipToTrack } from "../ops/reorder";
+import type { SourceMedia } from "../../media/mediaStore";
 
 interface AddClipOptions {
   trackId?: string;
@@ -23,16 +25,18 @@ interface TimelineState {
     next: { inPointSec?: number; outPointSec?: number },
     sourceDurationSec: number,
   ) => void;
-  /** Appends a clip to a track (default: first video track, after its last clip). */
-  addClip: (
-    sourceId: string,
-    durationSec: number,
-    opts?: AddClipOptions,
-  ) => void;
+  /** Appends a clip to a track (default: first track whose kind accepts this source's kind, after its last clip). No-op if no such track exists or the source's kind doesn't fit an explicit target. */
+  addClip: (source: SourceMedia, opts?: AddClipOptions) => void;
   /** Splits the given clip at the current playhead position, if it falls inside it. */
   splitClipAtPlayhead: (clipId: string) => void;
   deleteClip: (clipId: string) => void;
-  moveClip: (clipId: string, newStartSec: number) => void;
+  /** Moves a clip to a new position, optionally on a different track. No-op if the clip's kind doesn't fit the target track. */
+  moveClip: (clipId: string, targetTrackId: string, newStartSec: number) => void;
+  addTrack: (kind: TrackKind) => void;
+  /** No-op if the track still has clips on it. */
+  removeTrack: (trackId: string) => void;
+  setTrackMuted: (trackId: string, muted: boolean) => void;
+  setTrackHidden: (trackId: string, hidden: boolean) => void;
 }
 
 export const useTimelineStore = create<TimelineState>((set) => ({
@@ -59,12 +63,17 @@ export const useTimelineStore = create<TimelineState>((set) => ({
       },
     })),
 
-  addClip: (sourceId, durationSec, opts) =>
+  addClip: (source, opts) =>
     set((state) => {
+      // Default target: the first track whose kind actually accepts this
+      // source's kind (video -> video track, audio -> audio track, image ->
+      // overlay track), not just "the video track" -- otherwise imported
+      // audio/images would have nowhere valid to land by default.
       const targetTrack = opts?.trackId
         ? state.project.tracks.find((t) => t.id === opts.trackId)
-        : state.project.tracks.find((t) => t.kind === "video");
+        : state.project.tracks.find((t) => canAddSourceKindToTrack(t.kind, source.kind));
       if (!targetTrack) return state;
+      if (!canAddSourceKindToTrack(targetTrack.kind, source.kind)) return state;
 
       const lastClipEnd = targetTrack.clips.reduce(
         (max, clip) => Math.max(max, clipEndSec(clip)),
@@ -73,10 +82,11 @@ export const useTimelineStore = create<TimelineState>((set) => ({
       const startSec = opts?.startSec ?? lastClipEnd;
 
       const updatedTrack = insertClip(targetTrack, {
-        sourceId,
+        sourceId: source.id,
+        sourceKind: source.kind,
         startSec,
         inPointSec: 0,
-        outPointSec: durationSec,
+        outPointSec: source.durationSec,
       });
       const newClip = updatedTrack.clips.find(
         (c) => !targetTrack.clips.some((old) => old.id === c.id),
@@ -138,14 +148,84 @@ export const useTimelineStore = create<TimelineState>((set) => ({
         state.selectedClipId === clipId ? null : state.selectedClipId,
     })),
 
-  moveClip: (clipId, newStartSec) =>
+  moveClip: (clipId, targetTrackId, newStartSec) =>
+    set((state) => {
+      const sourceTrack = state.project.tracks.find((t) =>
+        t.clips.some((c) => c.id === clipId),
+      );
+      const targetTrack = state.project.tracks.find((t) => t.id === targetTrackId);
+      if (!sourceTrack || !targetTrack) return state;
+
+      if (sourceTrack.id === targetTrack.id) {
+        return {
+          project: {
+            ...state.project,
+            tracks: state.project.tracks.map((t) =>
+              t.id === sourceTrack.id
+                ? moveClipWithinTrack(t, clipId, newStartSec)
+                : t,
+            ),
+          },
+        };
+      }
+
+      const clip = sourceTrack.clips.find((c) => c.id === clipId)!;
+      if (!canAddSourceKindToTrack(targetTrack.kind, clip.sourceKind)) return state;
+
+      const result = moveClipToTrack(sourceTrack, targetTrack, clipId, newStartSec);
+      if (!result) return state;
+
+      return {
+        project: {
+          ...state.project,
+          tracks: state.project.tracks.map((t) => {
+            if (t.id === result.sourceTrack.id) return result.sourceTrack;
+            if (t.id === result.targetTrack.id) return result.targetTrack;
+            return t;
+          }),
+        },
+      };
+    }),
+
+  addTrack: (kind) =>
     set((state) => ({
       project: {
         ...state.project,
-        tracks: state.project.tracks.map((track) =>
-          track.clips.some((c) => c.id === clipId)
-            ? moveClipWithinTrack(track, clipId, newStartSec)
-            : track,
+        tracks: [
+          ...state.project.tracks,
+          createTrack(kind, state.project.tracks.length),
+        ],
+      },
+    })),
+
+  removeTrack: (trackId) =>
+    set((state) => {
+      const track = state.project.tracks.find((t) => t.id === trackId);
+      if (!track || track.clips.length > 0) return state;
+      return {
+        project: {
+          ...state.project,
+          tracks: state.project.tracks.filter((t) => t.id !== trackId),
+        },
+      };
+    }),
+
+  setTrackMuted: (trackId, muted) =>
+    set((state) => ({
+      project: {
+        ...state.project,
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, muted } : t,
+        ),
+      },
+    })),
+
+  setTrackHidden: (trackId, hidden) =>
+    set((state) => ({
+      project: {
+        ...state.project,
+        tracks: state.project.tracks.map((t) =>
+          t.id === trackId ? { ...t, hidden } : t,
         ),
       },
     })),

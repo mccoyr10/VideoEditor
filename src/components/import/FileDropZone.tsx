@@ -2,10 +2,10 @@ import { useRef, useState } from "react";
 import clsx from "clsx";
 
 interface FileDropZoneProps {
-  onFile: (file: File) => void;
+  onFiles: (files: File[]) => void;
 }
 
-export function FileDropZone({ onFile }: FileDropZoneProps) {
+export function FileDropZone({ onFiles }: FileDropZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -26,19 +26,19 @@ export function FileDropZone({ onFile }: FileDropZoneProps) {
       onDrop={(e) => {
         e.preventDefault();
         setIsDragOver(false);
-        const file = e.dataTransfer.files[0];
-        if (file) onFile(file);
+        if (e.dataTransfer.files.length > 0) onFiles([...e.dataTransfer.files]);
       }}
     >
-      <p>Drop a video file here, or click to choose one</p>
+      <p>Drop video, audio, or image files here, or click to choose</p>
       <input
         ref={inputRef}
         type="file"
-        accept="video/*"
+        accept="video/*,audio/*,image/*"
+        multiple
         className="hidden"
         onChange={(e) => {
-          const file = e.currentTarget.files?.[0];
-          if (file) onFile(file);
+          if (e.currentTarget.files?.length) onFiles([...e.currentTarget.files]);
+          e.currentTarget.value = "";
         }}
       />
     </div>

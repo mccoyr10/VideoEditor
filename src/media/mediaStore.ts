@@ -1,13 +1,29 @@
 import { create } from "zustand";
 
-export interface SourceMedia {
+interface SourceMediaBase {
   id: string;
   file: File;
   objectUrl: string;
   durationSec: number;
+}
+
+export interface VideoSource extends SourceMediaBase {
+  kind: "video";
   width: number;
   height: number;
 }
+
+export interface AudioSource extends SourceMediaBase {
+  kind: "audio";
+}
+
+export interface ImageSource extends SourceMediaBase {
+  kind: "image";
+  width: number;
+  height: number;
+}
+
+export type SourceMedia = VideoSource | AudioSource | ImageSource;
 
 interface MediaState {
   sources: Record<string, SourceMedia>;

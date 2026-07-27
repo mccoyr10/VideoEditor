@@ -9,14 +9,14 @@ import {
 import { useTimelineStore } from "../../timeline/store/timelineStore";
 import { useMediaStore } from "../../media/mediaStore";
 import { allClips, totalDurationSec } from "../../timeline/model/selectors";
-import { clipEndSec } from "../../timeline/model/types";
-import { PIXELS_PER_SECOND } from "../../timeline/constants";
+import { clipEndSec, type TrackKind } from "../../timeline/model/types";
+import { PIXELS_PER_SECOND, TRACK_LABEL_WIDTH_PX } from "../../timeline/constants";
 import { TimelineRuler } from "./TimelineRuler";
 import { Track } from "./Track";
 import { Playhead } from "./Playhead";
 
 interface TimelineProps {
-  onImport: (file: File) => void;
+  onImportFiles: (files: File[]) => void;
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -24,21 +24,19 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
 }
 
-export function Timeline({ onImport }: TimelineProps) {
+export function Timeline({ onImportFiles }: TimelineProps) {
   const project = useTimelineStore((s) => s.project);
   const playheadSec = useTimelineStore((s) => s.playheadSec);
   const selectedClipId = useTimelineStore((s) => s.selectedClipId);
   const selectClip = useTimelineStore((s) => s.selectClip);
   const splitClipAtPlayhead = useTimelineStore((s) => s.splitClipAtPlayhead);
   const deleteClip = useTimelineStore((s) => s.deleteClip);
+  const moveClip = useTimelineStore((s) => s.moveClip);
+  const addTrack = useTimelineStore((s) => s.addTrack);
   const sources = useMediaStore((s) => s.sources);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const moveClip = useTimelineStore((s) => s.moveClip);
-
-  const selectedClip = project.tracks
-    .flatMap((t) => t.clips)
-    .find((c) => c.id === selectedClipId);
+  const selectedClip = allClips(project).find((c) => c.id === selectedClipId);
 
   const canSplit =
     !!selectedClip &&
@@ -53,7 +51,8 @@ export function Timeline({ onImport }: TimelineProps) {
     const clip = allClips(project).find((c) => c.id === event.active.id);
     if (!clip) return;
     const deltaSec = event.delta.x / PIXELS_PER_SECOND;
-    moveClip(clip.id, clip.startSec + deltaSec);
+    const targetTrackId = (event.over?.id as string | undefined) ?? clip.trackId;
+    moveClip(clip.id, targetTrackId, clip.startSec + deltaSec);
   };
 
   useEffect(() => {
@@ -72,6 +71,7 @@ export function Timeline({ onImport }: TimelineProps) {
   }, [selectedClipId, deleteClip, splitClipAtPlayhead]);
 
   const durationSec = Math.max(5, totalDurationSec(project));
+  const contentWidthPx = durationSec * PIXELS_PER_SECOND;
 
   return (
     <div className="flex h-full flex-col gap-2">
@@ -86,11 +86,11 @@ export function Timeline({ onImport }: TimelineProps) {
         <input
           ref={fileInputRef}
           type="file"
-          accept="video/*"
+          accept="video/*,audio/*,image/*"
+          multiple
           className="hidden"
           onChange={(e) => {
-            const file = e.currentTarget.files?.[0];
-            if (file) onImport(file);
+            if (e.currentTarget.files?.length) onImportFiles([...e.currentTarget.files]);
             e.currentTarget.value = "";
           }}
         />
@@ -110,16 +110,39 @@ export function Timeline({ onImport }: TimelineProps) {
         >
           Delete (Del)
         </button>
+        <select
+          defaultValue=""
+          onChange={(e) => {
+            const kind = e.currentTarget.value as TrackKind | "";
+            if (kind) addTrack(kind);
+            e.currentTarget.value = "";
+          }}
+          className="rounded bg-neutral-700 px-2 py-1 hover:bg-neutral-600"
+        >
+          <option value="" disabled>
+            + Add track
+          </option>
+          <option value="video">Video</option>
+          <option value="audio">Audio</option>
+          <option value="overlay">Overlay</option>
+        </select>
       </div>
-      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
+      <div className="min-h-0 flex-1 overflow-auto">
         <div className="relative w-fit min-w-full">
-          <TimelineRuler durationSec={durationSec} />
+          <div className="flex">
+            <div
+              className="shrink-0 border-r border-b border-neutral-800"
+              style={{ width: TRACK_LABEL_WIDTH_PX }}
+            />
+            <TimelineRuler durationSec={durationSec} />
+          </div>
           <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
             <div className="relative">
               {project.tracks.map((track) => (
                 <Track
                   key={track.id}
                   track={track}
+                  widthPx={contentWidthPx}
                   sourceDurationSec={(sourceId) => sources[sourceId]?.durationSec ?? 0}
                   selectedClipId={selectedClipId}
                   onSelectClip={selectClip}

@@ -14,6 +14,7 @@ describe("totalDurationSec", () => {
     track.clips.push(
       createClip({
         sourceId: "src-1",
+        sourceKind: "video",
         trackId: track.id,
         startSec: 2,
         inPointSec: 0,

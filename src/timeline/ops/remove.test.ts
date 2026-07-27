@@ -4,9 +4,9 @@ import { deleteClip } from "./remove";
 
 function trackWithThreeClips() {
   let track = createTrack("video", 0);
-  const a = createClip({ sourceId: "s", trackId: track.id, startSec: 0, inPointSec: 0, outPointSec: 5 });
-  const b = createClip({ sourceId: "s", trackId: track.id, startSec: 5, inPointSec: 0, outPointSec: 5 });
-  const c = createClip({ sourceId: "s", trackId: track.id, startSec: 10, inPointSec: 0, outPointSec: 5 });
+  const a = createClip({ sourceId: "s", sourceKind: "video", trackId: track.id, startSec: 0, inPointSec: 0, outPointSec: 5 });
+  const b = createClip({ sourceId: "s", sourceKind: "video", trackId: track.id, startSec: 5, inPointSec: 0, outPointSec: 5 });
+  const c = createClip({ sourceId: "s", sourceKind: "video", trackId: track.id, startSec: 10, inPointSec: 0, outPointSec: 5 });
   track = { ...track, clips: [a, b, c] };
   return { track, a, b, c };
 }

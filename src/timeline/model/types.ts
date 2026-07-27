@@ -4,6 +4,9 @@ export type SourceId = string;
 
 export type TrackKind = "video" | "audio" | "overlay";
 
+/** The kind of imported media a clip's source is — mirrors SourceMedia["kind"] in media/mediaStore.ts. */
+export type MediaKind = "video" | "audio" | "image";
+
 export interface Track {
   id: TrackId;
   kind: TrackKind;
@@ -23,6 +26,7 @@ export interface Transition {
 export interface Clip {
   id: ClipId;
   sourceId: SourceId;
+  sourceKind: MediaKind;
   trackId: TrackId;
   /** Position on the timeline, in seconds. */
   startSec: number;

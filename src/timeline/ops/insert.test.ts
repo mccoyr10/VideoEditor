@@ -7,6 +7,7 @@ describe("insertClip", () => {
     const track = createTrack("video", 0);
     const result = insertClip(track, {
       sourceId: "src-1",
+      sourceKind: "video",
       startSec: 0,
       inPointSec: 0,
       outPointSec: 5,
@@ -19,12 +20,14 @@ describe("insertClip", () => {
     let track = createTrack("video", 0);
     track = insertClip(track, {
       sourceId: "src-1",
+      sourceKind: "video",
       startSec: 5,
       inPointSec: 0,
       outPointSec: 8,
     });
     track = insertClip(track, {
       sourceId: "src-2",
+      sourceKind: "video",
       startSec: 0,
       inPointSec: 0,
       outPointSec: 3,
