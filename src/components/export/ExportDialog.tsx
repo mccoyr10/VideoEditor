@@ -20,7 +20,7 @@ export function ExportDialog({ clip, source }: ExportDialogProps) {
         onClick={() => clip && source && exportClip(clip, source)}
         className="rounded bg-emerald-700 px-3 py-1 text-sm text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-40"
       >
-        Export trimmed clip
+        Export selected clip
       </button>
 
       {status === "loading" && (

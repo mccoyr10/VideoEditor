@@ -2,13 +2,14 @@ import { useRef } from "react";
 import { useTimelineStore } from "../timeline/store/timelineStore";
 import { useMediaStore } from "../media/mediaStore";
 import { usePlaybackEngine } from "./usePlaybackEngine";
-import { clipDurationSec } from "../timeline/model/types";
+import { totalDurationSec } from "../timeline/model/selectors";
 import { formatTime } from "../lib/time";
 
 /**
- * MVP preview: a single native <video> element synced to the one clip on
- * the timeline. Multi-track/overlay compositing will replace this with a
- * <canvas> renderer once more than one visible track exists at once.
+ * Preview for the (single, for now) video track: a native <video> element
+ * whose src is swapped as playback advances across the track's clips.
+ * Multi-track/overlay compositing will replace this with a layered
+ * renderer once more than one visible track exists at once.
  */
 export function PreviewPlayer() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -16,12 +17,16 @@ export function PreviewPlayer() {
   const sources = useMediaStore((s) => s.sources);
   const playheadSec = useTimelineStore((s) => s.playheadSec);
 
-  const clip = project.tracks[0]?.clips[0] ?? null;
-  const source = clip ? sources[clip.sourceId] : null;
+  const videoTrack = project.tracks.find((t) => t.kind === "video");
+  const clips = videoTrack?.clips ?? [];
 
-  const { isPlaying, play, pause, seek } = usePlaybackEngine(videoRef, clip);
+  const { isPlaying, activeClip, play, pause, seek } = usePlaybackEngine(
+    videoRef,
+    clips,
+    sources,
+  );
 
-  if (!clip || !source) {
+  if (clips.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-neutral-500">
         Import a video to preview it here
@@ -29,19 +34,16 @@ export function PreviewPlayer() {
     );
   }
 
-  const durationSec = clipDurationSec(clip);
+  const durationSec = totalDurationSec(project);
+  const activeSource = activeClip ? sources[activeClip.sourceId] : null;
 
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex flex-1 items-center justify-center overflow-hidden rounded-lg bg-black">
-        <video
-          ref={videoRef}
-          src={source.objectUrl}
-          className="max-h-full max-w-full"
-          onLoadedMetadata={(e) => {
-            e.currentTarget.currentTime = clip.inPointSec;
-          }}
-        />
+        {!activeSource && (
+          <span className="text-sm text-neutral-600">Gap — no clip here</span>
+        )}
+        <video ref={videoRef} className="max-h-full max-w-full" />
       </div>
       <div className="flex items-center gap-3 text-sm">
         <button
@@ -53,15 +55,15 @@ export function PreviewPlayer() {
         </button>
         <input
           type="range"
-          min={clip.startSec}
-          max={clip.startSec + durationSec}
+          min={0}
+          max={durationSec}
           step={0.01}
-          value={playheadSec}
+          value={Math.min(playheadSec, durationSec)}
           onChange={(e) => seek(Number(e.currentTarget.value))}
           className="flex-1"
         />
         <span className="tabular-nums text-neutral-400">
-          {formatTime(playheadSec - clip.startSec)} / {formatTime(durationSec)}
+          {formatTime(playheadSec)} / {formatTime(durationSec)}
         </span>
       </div>
     </div>

@@ -13,6 +13,7 @@ function App() {
   const sources = useMediaStore((s) => s.sources);
   const addClip = useTimelineStore((s) => s.addClip);
   const project = useTimelineStore((s) => s.project);
+  const selectedClipId = useTimelineStore((s) => s.selectedClipId);
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -23,14 +24,20 @@ function App() {
     [addSource, addClip],
   );
 
-  const clip = project.tracks[0]?.clips[0] ?? null;
-  const source = clip ? sources[clip.sourceId] : null;
+  const videoTrack = project.tracks.find((t) => t.kind === "video");
+  const clips = videoTrack?.clips ?? [];
+  const selectedClip = clips.find((c) => c.id === selectedClipId) ?? null;
+  const selectedSource = selectedClip ? sources[selectedClip.sourceId] : null;
 
   return (
     <EditorLayout
-      preview={clip ? <PreviewPlayer /> : <FileDropZone onFile={handleFile} />}
-      timeline={<Timeline />}
-      exportBar={<ExportDialog clip={clip} source={source ?? null} />}
+      preview={
+        clips.length > 0 ? <PreviewPlayer /> : <FileDropZone onFile={handleFile} />
+      }
+      timeline={<Timeline onImport={handleFile} />}
+      exportBar={
+        <ExportDialog clip={selectedClip} source={selectedSource ?? null} />
+      }
     />
   );
 }
