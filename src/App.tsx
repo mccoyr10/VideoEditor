@@ -7,7 +7,6 @@ import { ExportDialog } from "./components/export/ExportDialog";
 import { importMedia } from "./media/importMedia";
 import { useMediaStore } from "./media/mediaStore";
 import { useTimelineStore } from "./timeline/store/timelineStore";
-import { allClips } from "./timeline/model/selectors";
 import { canAddSourceKindToTrack } from "./timeline/model/trackCompatibility";
 
 function App() {
@@ -15,7 +14,6 @@ function App() {
   const sources = useMediaStore((s) => s.sources);
   const addClip = useTimelineStore((s) => s.addClip);
   const project = useTimelineStore((s) => s.project);
-  const selectedClipId = useTimelineStore((s) => s.selectedClipId);
   const [importWarning, setImportWarning] = useState<string | null>(null);
 
   const handleFiles = useCallback(
@@ -48,9 +46,6 @@ function App() {
 
   const videoTrack = project.tracks.find((t) => t.kind === "video");
   const hasVideoClips = (videoTrack?.clips.length ?? 0) > 0;
-  const selectedClip =
-    allClips(project).find((c) => c.id === selectedClipId) ?? null;
-  const selectedSource = selectedClip ? sources[selectedClip.sourceId] : null;
 
   return (
     <EditorLayout
@@ -65,7 +60,7 @@ function App() {
               {importWarning}
             </div>
           )}
-          <ExportDialog clip={selectedClip} source={selectedSource ?? null} />
+          <ExportDialog project={project} sources={sources} />
         </div>
       }
     />

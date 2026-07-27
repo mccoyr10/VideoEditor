@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchFile } from "@ffmpeg/util";
 import { getFFmpeg, onFFmpegProgress } from "./ffmpegClient";
-import { buildTrimCommand } from "./buildCommand";
-import type { Clip } from "../timeline/model/types";
+import { buildProjectCommand, OUTPUT_FILE_NAME } from "./buildProjectCommand";
+import type { Project } from "../timeline/model/types";
 import type { SourceMedia } from "../media/mediaStore";
 
-type ExportStatus = "idle" | "loading" | "running" | "done" | "error";
+type ExportStatus = "idle" | "preparing" | "running" | "done" | "error";
 
 interface ExportState {
   status: ExportStatus;
   progress: number;
+  statusMessage: string | null;
   error: string | null;
   resultUrl: string | null;
 }
@@ -17,14 +18,10 @@ interface ExportState {
 const idleState: ExportState = {
   status: "idle",
   progress: 0,
+  statusMessage: null,
   error: null,
   resultUrl: null,
 };
-
-function extensionOf(filename: string): string {
-  const idx = filename.lastIndexOf(".");
-  return idx >= 0 ? filename.slice(idx) : ".mp4";
-}
 
 export function useExport() {
   const [state, setState] = useState<ExportState>(idleState);
@@ -36,40 +33,68 @@ export function useExport() {
     return () => onFFmpegProgress(null);
   }, []);
 
-  const exportClip = useCallback(async (clip: Clip, source: SourceMedia) => {
-    setState({ status: "loading", progress: 0, error: null, resultUrl: null });
-    try {
-      const ffmpeg = await getFFmpeg();
-      const inputFileName = `input${extensionOf(source.file.name)}`;
-      const outputFileName = "output.mp4";
-
-      await ffmpeg.writeFile(inputFileName, await fetchFile(source.file));
-
-      setState((s) => ({ ...s, status: "running" }));
-      const args = buildTrimCommand({
-        inputFileName,
-        outputFileName,
-        inPointSec: clip.inPointSec,
-        outPointSec: clip.outPointSec,
-      });
-      await ffmpeg.exec(args);
-
-      const data = await ffmpeg.readFile(outputFileName);
-      const blob = new Blob([data as BlobPart], { type: "video/mp4" });
-      const resultUrl = URL.createObjectURL(blob);
-
-      setState({ status: "done", progress: 1, error: null, resultUrl });
-    } catch (err) {
+  const exportProject = useCallback(
+    async (project: Project, sources: Record<string, SourceMedia>) => {
       setState({
-        status: "error",
+        status: "preparing",
         progress: 0,
-        error: err instanceof Error ? err.message : "Export failed",
+        statusMessage: "Loading ffmpeg…",
+        error: null,
         resultUrl: null,
       });
-    }
-  }, []);
+
+      const { args, plannedInputs } = buildProjectCommand(project, sources);
+
+      try {
+        const ffmpeg = await getFFmpeg();
+
+        for (let i = 0; i < plannedInputs.length; i++) {
+          const input = plannedInputs[i];
+          setState((s) => ({
+            ...s,
+            statusMessage: `Preparing ${i + 1}/${plannedInputs.length} files…`,
+          }));
+          await ffmpeg.writeFile(input.fileName, await fetchFile(input.source.file));
+        }
+
+        setState((s) => ({
+          ...s,
+          status: "running",
+          statusMessage: "Exporting… this may take a while",
+        }));
+        await ffmpeg.exec(args);
+
+        const data = await ffmpeg.readFile(OUTPUT_FILE_NAME);
+        const blob = new Blob([data as BlobPart], { type: "video/mp4" });
+        const resultUrl = URL.createObjectURL(blob);
+
+        // Bound MEMFS growth across repeated exports in one session.
+        for (const input of plannedInputs) {
+          await ffmpeg.deleteFile(input.fileName).catch(() => {});
+        }
+        await ffmpeg.deleteFile(OUTPUT_FILE_NAME).catch(() => {});
+
+        setState({
+          status: "done",
+          progress: 1,
+          statusMessage: null,
+          error: null,
+          resultUrl,
+        });
+      } catch (err) {
+        setState({
+          status: "error",
+          progress: 0,
+          statusMessage: null,
+          error: err instanceof Error ? err.message : "Export failed",
+          resultUrl: null,
+        });
+      }
+    },
+    [],
+  );
 
   const reset = useCallback(() => setState(idleState), []);
 
-  return { ...state, exportClip, reset };
+  return { ...state, exportProject, reset };
 }

@@ -1,34 +1,36 @@
 import { useExport } from "../../export/useExport";
-import type { Clip } from "../../timeline/model/types";
+import type { Project } from "../../timeline/model/types";
+import { allClips } from "../../timeline/model/selectors";
 import type { SourceMedia } from "../../media/mediaStore";
 
 interface ExportDialogProps {
-  clip: Clip | null;
-  source: SourceMedia | null;
+  project: Project;
+  sources: Record<string, SourceMedia>;
 }
 
-export function ExportDialog({ clip, source }: ExportDialogProps) {
-  const { status, progress, error, resultUrl, exportClip } = useExport();
+export function ExportDialog({ project, sources }: ExportDialogProps) {
+  const { status, progress, statusMessage, error, resultUrl, exportProject } =
+    useExport();
 
-  const disabled = !clip || !source || status === "loading" || status === "running";
+  const isEmpty = allClips(project).length === 0;
+  const isBusy = status === "preparing" || status === "running";
+  const disabled = isEmpty || isBusy;
 
   return (
     <div className="flex items-center gap-3 rounded-lg border border-neutral-800 p-3">
       <button
         type="button"
         disabled={disabled}
-        onClick={() => clip && source && exportClip(clip, source)}
+        onClick={() => exportProject(project, sources)}
         className="rounded bg-emerald-700 px-3 py-1 text-sm text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-40"
       >
-        Export selected clip
+        Export project
       </button>
 
-      {status === "loading" && (
-        <span className="text-xs text-neutral-400">Loading ffmpeg…</span>
-      )}
-      {status === "running" && (
+      {isBusy && (
         <span className="text-xs text-neutral-400">
-          Exporting… {Math.round(progress * 100)}%
+          {statusMessage}
+          {status === "running" && ` (${Math.round(progress * 100)}%)`}
         </span>
       )}
       {status === "error" && (
