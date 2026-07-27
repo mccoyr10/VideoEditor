@@ -1,4 +1,12 @@
-import { clipEndSec, type Project } from "./types";
+import { clipEndSec, type Clip, type Project, type Track } from "./types";
+
+/** The clip on this track whose [startSec, clipEndSec) contains sec, if any. */
+export function activeClipAt(track: Track, sec: number): Clip | null {
+  return (
+    track.clips.find((clip) => sec >= clip.startSec && sec < clipEndSec(clip)) ??
+    null
+  );
+}
 
 export function totalDurationSec(project: Project): number {
   let max = 0;
