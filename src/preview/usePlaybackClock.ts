@@ -5,7 +5,7 @@ import { useTimelineStore } from "../timeline/store/timelineStore";
  * An independent timeline clock: advances the store's playheadSec via
  * requestAnimationFrame while playing, with no knowledge of clips, tracks,
  * or media elements. Per-track playback (video/audio sync) is driven
- * separately by useTrackLayer, reacting to playheadSec changes.
+ * separately by TrackLayer/useClipMediaSync, reacting to playheadSec changes.
  */
 export function usePlaybackClock(durationSec: number) {
   const [isPlaying, setIsPlaying] = useState(false);

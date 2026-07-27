@@ -30,6 +30,42 @@ describe("moveClipWithinTrack", () => {
     const result = moveClipWithinTrack(track, a.id, 20);
     expect(result.clips.map((c) => c.id)).toEqual([b.id, a.id]);
   });
+
+  it("clears the moved clip's own transition fields", () => {
+    let track = createTrack("video", 0);
+    const a = createClip({ sourceId: "s", sourceKind: "video", trackId: track.id, startSec: 0, inPointSec: 0, outPointSec: 5 });
+    const b = createClip({
+      sourceId: "s", sourceKind: "video", trackId: track.id, startSec: 5, inPointSec: 0, outPointSec: 5,
+    });
+    track = {
+      ...track,
+      clips: [
+        { ...a, transitionOut: { type: "crossfade", durationSec: 1 } },
+        { ...b, transitionIn: { type: "crossfade", durationSec: 1 } },
+      ],
+    };
+
+    const result = moveClipWithinTrack(track, b.id, 20);
+    const movedB = result.clips.find((c) => c.id === b.id)!;
+    expect(movedB.transitionIn).toBeUndefined();
+  });
+
+  it("clears the old neighbor's matching transition field", () => {
+    let track = createTrack("video", 0);
+    const a = createClip({ sourceId: "s", sourceKind: "video", trackId: track.id, startSec: 0, inPointSec: 0, outPointSec: 5 });
+    const b = createClip({ sourceId: "s", sourceKind: "video", trackId: track.id, startSec: 5, inPointSec: 0, outPointSec: 5 });
+    track = {
+      ...track,
+      clips: [
+        { ...a, transitionOut: { type: "crossfade", durationSec: 1 } },
+        { ...b, transitionIn: { type: "crossfade", durationSec: 1 } },
+      ],
+    };
+
+    const result = moveClipWithinTrack(track, b.id, 20);
+    const movedA = result.clips.find((c) => c.id === a.id)!;
+    expect(movedA.transitionOut).toBeUndefined();
+  });
 });
 
 describe("moveClipToTrack", () => {
@@ -75,5 +111,24 @@ describe("moveClipToTrack", () => {
     const sourceTrack = createTrack("video", 0);
     const targetTrack = createTrack("overlay", 1);
     expect(moveClipToTrack(sourceTrack, targetTrack, "nonexistent", 0)).toBeNull();
+  });
+
+  it("clears the moved clip's transition fields and the old neighbor's matching field", () => {
+    let sourceTrack = createTrack("video", 0);
+    const targetTrack = createTrack("overlay", 1);
+    const a = createClip({ sourceId: "s", sourceKind: "video", trackId: sourceTrack.id, startSec: 0, inPointSec: 0, outPointSec: 5 });
+    const b = createClip({ sourceId: "s", sourceKind: "video", trackId: sourceTrack.id, startSec: 5, inPointSec: 0, outPointSec: 5 });
+    sourceTrack = {
+      ...sourceTrack,
+      clips: [
+        { ...a, transitionOut: { type: "crossfade", durationSec: 1 } },
+        { ...b, transitionIn: { type: "crossfade", durationSec: 1 } },
+      ],
+    };
+
+    const result = moveClipToTrack(sourceTrack, targetTrack, b.id, 0)!;
+    expect(result.targetTrack.clips[0].transitionIn).toBeUndefined();
+    const remainingA = result.sourceTrack.clips.find((c) => c.id === a.id)!;
+    expect(remainingA.transitionOut).toBeUndefined();
   });
 });

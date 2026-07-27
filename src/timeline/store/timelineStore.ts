@@ -1,12 +1,13 @@
 import { create } from "zustand";
 import { createProject, createTrack } from "../model/factories";
-import { clipEndSec, type Project, type TrackKind } from "../model/types";
+import { clipEndSec, type Project, type Transition, type TrackKind } from "../model/types";
 import { canAddSourceKindToTrack } from "../model/trackCompatibility";
 import { trimClip } from "../ops/trim";
 import { insertClip } from "../ops/insert";
 import { splitClip } from "../ops/split";
 import { deleteClip as deleteClipOp } from "../ops/remove";
 import { moveClipWithinTrack, moveClipToTrack } from "../ops/reorder";
+import { setTransition as setTransitionOp } from "../ops/transition";
 import type { SourceMedia } from "../../media/mediaStore";
 
 interface AddClipOptions {
@@ -37,6 +38,12 @@ interface TimelineState {
   removeTrack: (trackId: string) => void;
   setTrackMuted: (trackId: string, muted: boolean) => void;
   setTrackHidden: (trackId: string, hidden: boolean) => void;
+  /** Sets/resizes (transition) or clears (null) a crossfade between two adjacent clips on the same track. No-op if they're not on the same track or not adjacent. */
+  setTransition: (
+    leftClipId: string,
+    rightClipId: string,
+    transition: Transition | null,
+  ) => void;
 }
 
 export const useTimelineStore = create<TimelineState>((set) => ({
@@ -229,4 +236,25 @@ export const useTimelineStore = create<TimelineState>((set) => ({
         ),
       },
     })),
+
+  setTransition: (leftClipId, rightClipId, transition) =>
+    set((state) => {
+      const track = state.project.tracks.find(
+        (t) =>
+          t.clips.some((c) => c.id === leftClipId) &&
+          t.clips.some((c) => c.id === rightClipId),
+      );
+      if (!track) return state;
+
+      const updatedTrack = setTransitionOp(track, leftClipId, rightClipId, transition);
+
+      return {
+        project: {
+          ...state.project,
+          tracks: state.project.tracks.map((t) =>
+            t.id === track.id ? updatedTrack : t,
+          ),
+        },
+      };
+    }),
 }));

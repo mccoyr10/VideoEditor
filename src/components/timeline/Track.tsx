@@ -2,7 +2,9 @@ import { useDroppable } from "@dnd-kit/core";
 import clsx from "clsx";
 import type { Track as TrackModel } from "../../timeline/model/types";
 import { useTimelineStore } from "../../timeline/store/timelineStore";
+import { canSetTransition } from "../../timeline/ops/transition";
 import { ClipItem } from "./ClipItem";
+import { TransitionHandle } from "./TransitionHandle";
 
 interface TrackProps {
   track: TrackModel;
@@ -21,6 +23,8 @@ export function Track({
 }: TrackProps) {
   const removeTrack = useTimelineStore((s) => s.removeTrack);
   const { setNodeRef, isOver } = useDroppable({ id: track.id });
+
+  const sortedClips = [...track.clips].sort((a, b) => a.startSec - b.startSec);
 
   return (
     <div className="flex border-b border-neutral-800">
@@ -51,6 +55,12 @@ export function Track({
             onSelect={() => onSelectClip(clip.id)}
           />
         ))}
+        {sortedClips.slice(0, -1).map((left, i) => {
+          const right = sortedClips[i + 1];
+          return canSetTransition(left, right) ? (
+            <TransitionHandle key={`${left.id}-${right.id}`} left={left} right={right} />
+          ) : null;
+        })}
       </div>
     </div>
   );

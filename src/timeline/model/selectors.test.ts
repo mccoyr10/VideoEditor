@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createProject, createTrack } from "./factories";
 import { createClip } from "./factories";
-import { activeClipAt, totalDurationSec } from "./selectors";
+import { activeClipAt, activeTrackFrame, totalDurationSec } from "./selectors";
 
 describe("totalDurationSec", () => {
   it("is 0 for an empty project", () => {
@@ -62,5 +62,58 @@ describe("activeClipAt", () => {
   it("returns null for an empty track", () => {
     const track = createTrack("audio", 0);
     expect(activeClipAt(track, 0)).toBeNull();
+  });
+});
+
+describe("activeTrackFrame", () => {
+  function trackWithTransition() {
+    let track = createTrack("video", 0);
+    const a = {
+      ...createClip({ sourceId: "s", sourceKind: "video", trackId: track.id, startSec: 0, inPointSec: 0, outPointSec: 5 }),
+      transitionOut: { type: "crossfade" as const, durationSec: 1 },
+    };
+    // Right clip already shifted left by the 1s transition, as setTransition would do.
+    const b = {
+      ...createClip({ sourceId: "s", sourceKind: "video", trackId: track.id, startSec: 4, inPointSec: 0, outPointSec: 5 }),
+      transitionIn: { type: "crossfade" as const, durationSec: 1 },
+    };
+    track = { ...track, clips: [a, b] };
+    return { track, a, b };
+  }
+
+  it("returns just the clip with full weight outside any transition window", () => {
+    const { track, a } = trackWithTransition();
+    const frame = activeTrackFrame(track, 2);
+    expect(frame?.clip.id).toBe(a.id);
+    expect(frame?.weight).toBe(1);
+    expect(frame?.next).toBeUndefined();
+  });
+
+  it("returns both clips with complementary weights inside the overlap window", () => {
+    const { track, a, b } = trackWithTransition();
+    const frame = activeTrackFrame(track, 4.5); // midpoint of [4, 5) overlap
+    expect(frame?.clip.id).toBe(a.id);
+    expect(frame?.next?.clip.id).toBe(b.id);
+    expect(frame!.weight + frame!.next!.weight).toBeCloseTo(1);
+    expect(frame!.weight).toBeCloseTo(0.5, 1);
+  });
+
+  it("weight fades from 1 to 0 across the window", () => {
+    const { track } = trackWithTransition();
+    const start = activeTrackFrame(track, 4);
+    const nearEnd = activeTrackFrame(track, 4.9);
+    expect(start!.weight).toBeGreaterThan(nearEnd!.weight);
+  });
+
+  it("has no next clip when there's no transitionOut", () => {
+    let track = createTrack("video", 0);
+    const clip = createClip({ sourceId: "s", sourceKind: "video", trackId: track.id, startSec: 0, inPointSec: 0, outPointSec: 5 });
+    track = { ...track, clips: [clip] };
+    expect(activeTrackFrame(track, 2)?.next).toBeUndefined();
+  });
+
+  it("returns null when no clip is active", () => {
+    const track = createTrack("video", 0);
+    expect(activeTrackFrame(track, 0)).toBeNull();
   });
 });
